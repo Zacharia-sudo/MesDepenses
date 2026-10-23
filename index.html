@@ -178,6 +178,8 @@ main{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:14px 14px
 .rename-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,255,157,.14)}
 /* iOS : évite le zoom automatique des champs de saisie */
 .field{font-size:16px}
+.bar-max .bar-top span{color:var(--accent);font-weight:700}
+.bar-max .bar-track{outline:1px solid rgba(0,255,157,.35);outline-offset:1px}
 </style>
 </head>
 <body>
@@ -228,6 +230,24 @@ main{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:14px 14px
         <span><i class="dot dep"></i>Dépenses</span>
         <span><i class="dot rev"></i>Entrées</span>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ VUE STATISTIQUES ============ -->
+  <section id="view-stats" class="view">
+    <div class="card">
+      <div class="card-title">Catégorie</div>
+      <div id="statsCats" class="chips scroll"></div>
+    </div>
+    <div class="card">
+      <div class="card-title" id="statsWeekTitle">Semaines</div>
+      <div id="statsWeeks"></div>
+      <p class="muted small" id="statsWeekSummary" style="margin-top:8px"></p>
+    </div>
+    <div class="card">
+      <div class="card-title" id="statsMonthTitle">Mois</div>
+      <div id="statsMonths"></div>
+      <p class="muted small" id="statsMonthSummary" style="margin-top:8px"></p>
     </div>
   </section>
 
@@ -319,6 +339,7 @@ main{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:14px 14px
 
 <nav class="bottom-nav">
   <button class="nav-item" data-view="bilan"><span class="nav-ico">📊</span>Bilan</button>
+  <button class="nav-item" data-view="stats"><span class="nav-ico">📈</span>Stats</button>
   <button class="nav-item" data-view="ajouter"><span class="nav-plus">＋</span></button>
   <button class="nav-item" data-view="historique"><span class="nav-ico">📋</span>Historique</button>
   <button class="nav-item" data-view="reglages"><span class="nav-ico">⚙️</span>Réglages</button>
@@ -582,10 +603,11 @@ function showView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   $('view-' + name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(i => i.classList.toggle('active', i.dataset.view === name));
-  $('monthNav').style.display = (name === 'bilan' || name === 'historique') ? 'flex' : 'none';
+  $('monthNav').style.display = (name === 'bilan' || name === 'historique' || name === 'stats') ? 'flex' : 'none';
   $('spaceBar').style.display = (name === 'reglages') ? 'none' : 'flex';
   if (name === 'bilan') { histMonth = viewMonth; renderBilan(); }
   if (name === 'historique') { histMonth = viewMonth; renderHistFilters(); renderHistorique(); }
+  if (name === 'stats') renderStats();
   if (name === 'reglages') renderSettings();
   window.scrollTo(0, 0);
 }
@@ -594,6 +616,7 @@ function changeMonth(delta) {
   $('monthLabel').textContent = monthLabel(viewMonth);
   if (isActiveView('bilan')) renderBilan();
   if (isActiveView('historique')) { histMonth = viewMonth; renderHistFilters(); renderHistorique(); }
+  if (isActiveView('stats')) renderStats();
 }
 
 /* ---------- Onglets d'espaces (Privé / Travail) ---------- */
@@ -619,6 +642,7 @@ function setSpace(id) {
   renderSpaceBar();
   if (isActiveView('bilan')) renderBilan();
   if (isActiveView('historique')) { renderHistFilters(); renderHistorique(); }
+  if (isActiveView('stats')) renderStats();
   if (isActiveView('ajouter')) resetForm();
 }
 
@@ -758,6 +782,78 @@ function renderYearBars() {
   box.querySelectorAll('.year-col').forEach(col => {
     col.addEventListener('click', () => { viewMonth = col.dataset.ym; renderBilan(); });
   });
+}
+
+/* ---------- Statistiques : semaines du mois + comparaison des mois ---------- */
+let statsCat = 'all';
+
+function weekIndexOf(iso) {
+  const day = Number(iso.slice(8, 10));
+  return Math.min(5, Math.ceil(day / 7));
+}
+
+function renderStats() {
+  const cat = statsCat === 'all' ? null : catById(statsCat);
+  const catName = cat ? cat.emoji + ' ' + cat.label : 'Toutes les catégories';
+  const barColor = cat ? cat.color : 'var(--accent)';
+  const dep = state.entries.filter(e =>
+    e.type === 'depense' && spaceOf(e) === currentSpace && (!cat || e.cat === statsCat));
+
+  /* Chips de catégorie */
+  const chips = $('statsCats');
+  const items = [{ id: 'all', label: 'Toutes', emoji: '📊' }].concat(state.categories);
+  chips.innerHTML = items.map(c =>
+    '<button type="button" class="chip' + (statsCat === c.id ? ' active' : '') + '" data-cat="' + c.id + '">' +
+    c.emoji + ' ' + escapeHtml(c.label) + '</button>').join('');
+  chips.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => {
+    statsCat = b.dataset.cat;
+    renderStats();
+  }));
+
+  /* Semaines du mois affiché */
+  $('statsWeekTitle').textContent = 'Semaines — ' + catName + ' — ' + monthLabel(viewMonth);
+  const weeks = [1, 2, 3, 4, 5].map(w => ({
+    w: w,
+    val: sum(dep.filter(e => monthOf(e.date) === viewMonth && weekIndexOf(e.date) === w))
+  }));
+  const wkMax = Math.max(1, ...weeks.map(x => x.val));
+  const wkTop = Math.max(...weeks.map(x => x.val));
+  $('statsWeeks').innerHTML = weeks.map(x => {
+    const isMax = x.val > 0 && x.val === wkTop;
+    return '<div class="bar-row' + (isMax ? ' bar-max' : '') + '">' +
+      '<div class="bar-top"><span>Semaine ' + x.w + '</span><span class="bar-amount">' + fmt(x.val) + '</span></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + (x.val / wkMax * 100).toFixed(1) + '%;background:' + barColor + '"></div></div>' +
+    '</div>';
+  }).join('');
+
+  const totW = weeks.reduce((s, x) => s + x.val, 0);
+  const bestW = weeks.reduce((m, x) => x.val > m.val ? x : m, weeks[0]);
+  $('statsWeekSummary').textContent = totW > 0
+    ? 'Total : ' + fmt(totW) + ' · moyenne ' + fmt(totW / 5) + '/semaine · pic : Semaine ' + bestW.w + ' (' + fmt(bestW.val) + ')'
+    : 'Aucune dépense' + (cat ? ' en ' + cat.label : '') + ' en ' + monthLabel(viewMonth) + '.';
+
+  /* Comparaison des 12 derniers mois */
+  $('statsMonthTitle').textContent = 'Mois — ' + catName + ' — 12 derniers mois';
+  const months = [];
+  for (let i = 11; i >= 0; i--) months.push(shiftMonth(viewMonth, -i));
+  const monthly = months.map(ym => ({ ym: ym, val: sum(dep.filter(e => monthOf(e.date) === ym)) }));
+  const mMax = Math.max(1, ...monthly.map(x => x.val));
+  const mTop = Math.max(...monthly.map(x => x.val));
+  $('statsMonths').innerHTML = monthly.map(x => {
+    const isMax = x.val > 0 && x.val === mTop;
+    const d = new Date(Number(x.ym.slice(0, 4)), Number(x.ym.slice(5, 7)) - 1, 1);
+    const lbl = d.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }).replace('.', '');
+    return '<div class="bar-row' + (isMax ? ' bar-max' : '') + '">' +
+      '<div class="bar-top"><span>' + lbl + '</span><span class="bar-amount">' + fmt(x.val) + '</span></div>' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + (x.val / mMax * 100).toFixed(1) + '%;background:' + barColor + '"></div></div>' +
+    '</div>';
+  }).join('');
+
+  const totM = monthly.reduce((s, x) => s + x.val, 0);
+  const bestM = monthly.reduce((m, x) => x.val > m.val ? x : m, monthly[0]);
+  $('statsMonthSummary').textContent = totM > 0
+    ? 'Total 12 mois : ' + fmt(totM) + ' · moyenne ' + fmt(totM / 12) + '/mois · mois record : ' + monthLabel(bestM.ym) + ' (' + fmt(bestM.val) + ')'
+    : 'Aucune dépense' + (cat ? ' en ' + cat.label : '') + ' sur les 12 derniers mois.';
 }
 
 /* ---------- Vue Historique ---------- */
@@ -1070,6 +1166,7 @@ function renderSettings() {
 function refreshAll() {
   if (isActiveView('bilan')) renderBilan();
   if (isActiveView('historique')) renderHistorique();
+  if (isActiveView('stats')) renderStats();
 }
 
 /* ---------- Export / Import / Effacement ---------- */
