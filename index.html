@@ -230,6 +230,16 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
 .big-value,.mini-val,.amt,.bar-amount,.legend-amount,.amount-input,.detail-amount{font-family:ui-monospace,'SF Mono',Menlo,monospace}
 
 </style>
+<style>
+/* Camembert interactif */
+.donut-seg{cursor:pointer;transition:opacity .18s,stroke-width .18s}
+.donut-seg.dim{opacity:.3}
+.donut-seg.active{stroke-width:34}
+.donut-label{cursor:pointer;transition:opacity .18s}
+.donut-leader{stroke:rgba(130,140,170,.45);stroke-width:1}
+.donut-lab-text{fill:var(--muted);font-size:10px;font-weight:600}
+.donut-lab-amt{fill:var(--text);font-size:10.5px;font-weight:700}
+</style>
 </head>
 <body>
 
@@ -265,12 +275,7 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
     </div>
     <div class="card">
       <div class="card-title">Où part mon barème</div>
-      <div class="donut-wrap"><svg id="donutSvg" viewBox="0 0 180 180"></svg></div>
-      <div id="legendBox"></div>
-    </div>
-    <div class="card">
-      <div class="card-title">Par catégorie</div>
-      <div id="catBarsBox"></div>
+      <div class="donut-wrap"><svg id="donutSvg" viewBox="0 0 360 300"></svg></div>
     </div>
     <div class="card">
       <div class="card-title">12 derniers mois</div>
@@ -719,91 +724,168 @@ function renderBilan() {
     .sort((a, b) => b.val - a.val);
 
   renderDonut(byCat, totalDep);
-  renderLegend(byCat, totalDep);
-  renderCatBars(byCat, totalDep);
   renderYearBars();
 }
 
-/* Camembert (anneau) */
+/* Camembert interactif : % et sommes intégrés autour du cercle */
+let donutData = { byCat: [], total: 0 };
+let donutSel = null;
+
+function donutSetCenter(amountText, subText) {
+  const svg = $('donutSvg');
+  const t = svg.querySelector('.donut-center-amount');
+  const s = svg.querySelector('.donut-center-sub');
+  if (t) {
+    t.textContent = amountText;
+    t.setAttribute('font-size', amountText.length > 11 ? 11 : (amountText.length > 8 ? 12 : 14));
+  }
+  if (s) {
+    s.textContent = subText;
+    s.setAttribute('font-size', subText.length > 18 ? 8 : 9.5);
+  }
+}
+
 function renderDonut(byCat, total) {
   const svg = $('donutSvg');
   const NS = 'http://www.w3.org/2000/svg';
   svg.innerHTML = '';
-  const size = 180, c = size / 2, r = 62, sw = 26;
-  svg.setAttribute('viewBox', '0 0 ' + size + ' ' + size);
+  const W = 360, H = 300, cx = W / 2, cy = H / 2, r = 70, sw = 24;
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  donutData = { byCat: byCat, total: total };
+  donutSel = null;
 
   if (total <= 0 || byCat.length === 0) {
     const circle = document.createElementNS(NS, 'circle');
-    circle.setAttribute('cx', c); circle.setAttribute('cy', c); circle.setAttribute('r', r);
+    circle.setAttribute('cx', cx); circle.setAttribute('cy', cy); circle.setAttribute('r', r);
     circle.setAttribute('fill', 'none'); circle.setAttribute('stroke', '#262f42'); circle.setAttribute('stroke-width', sw);
     svg.appendChild(circle);
   } else {
     const C = 2 * Math.PI * r;
     let offset = 0;
-    byCat.forEach(item => {
+    byCat.forEach((item, i) => {
       const frac = item.val / total;
       const gap = byCat.length > 1 ? 2 : 0;
       const segLen = Math.max(frac * C - gap, 2);
       const circle = document.createElementNS(NS, 'circle');
-      circle.setAttribute('cx', c); circle.setAttribute('cy', c); circle.setAttribute('r', r);
+      circle.setAttribute('cx', cx); circle.setAttribute('cy', cy); circle.setAttribute('r', r);
       circle.setAttribute('fill', 'none');
       circle.setAttribute('stroke', item.cat.color);
       circle.setAttribute('stroke-width', sw);
       circle.setAttribute('stroke-dasharray', segLen + ' ' + (C - segLen));
       circle.setAttribute('stroke-dashoffset', String(-offset));
-      circle.setAttribute('transform', 'rotate(-90 ' + c + ' ' + c + ')');
+      circle.setAttribute('transform', 'rotate(-90 ' + cx + ' ' + cy + ')');
+      circle.setAttribute('class', 'donut-seg');
+      circle.setAttribute('data-idx', String(i));
       svg.appendChild(circle);
       offset += frac * C;
     });
   }
-  const txt = compact(total);
+
+  /* Étiquettes : % + somme, reliées au cercle */
+  if (byCat.length > 0 && total > 0) {
+    const labels = [];
+    let acc = 0;
+    byCat.forEach((item, i) => {
+      const frac = item.val / total;
+      const mid = (acc + frac / 2) * 2 * Math.PI - Math.PI / 2;
+      acc += frac;
+      labels.push({
+        i: i, item: item, pct: Math.round(frac * 100), side: Math.cos(mid) >= 0 ? 1 : -1,
+        x1: cx + Math.cos(mid) * (r + sw / 2 + 1),
+        y1: cy + Math.sin(mid) * (r + sw / 2 + 1),
+        y: cy + Math.sin(mid) * (r + sw / 2 + 18)
+      });
+    });
+    [1, -1].forEach(function (side) {
+      const ls = labels.filter(function (l) { return l.side === side; }).sort(function (a, b) { return a.y - b.y; });
+      for (let k = 1; k < ls.length; k++) {
+        if (ls[k].y - ls[k - 1].y < 24) ls[k].y = ls[k - 1].y + 24;
+      }
+      if (ls.length) {
+        const over = ls[ls.length - 1].y - (H - 14);
+        if (over > 0) ls.forEach(function (l) { l.y -= over; });
+      }
+      ls.forEach(function (l) {
+        const xEnd = cx + side * (r + sw / 2 + 14);
+        const xText = xEnd + side * 4;
+        const line = document.createElementNS(NS, 'polyline');
+        line.setAttribute('points', l.x1 + ',' + l.y1 + ' ' + xEnd + ',' + l.y + ' ' + xText + ',' + l.y);
+        line.setAttribute('fill', 'none');
+        line.setAttribute('class', 'donut-leader');
+        svg.appendChild(line);
+        const g = document.createElementNS(NS, 'g');
+        g.setAttribute('class', 'donut-label');
+        g.setAttribute('data-idx', String(l.i));
+        const t1 = document.createElementNS(NS, 'text');
+        t1.setAttribute('x', xText + side * 2);
+        t1.setAttribute('y', l.y - 3);
+        t1.setAttribute('text-anchor', side > 0 ? 'start' : 'end');
+        t1.setAttribute('class', 'donut-lab-text');
+        t1.textContent = l.item.cat.emoji + ' ' + l.pct + ' %';
+        const t2 = document.createElementNS(NS, 'text');
+        t2.setAttribute('x', xText + side * 2);
+        t2.setAttribute('y', l.y + 9);
+        t2.setAttribute('text-anchor', side > 0 ? 'start' : 'end');
+        t2.setAttribute('class', 'donut-lab-amt');
+        t2.textContent = compact(l.item.val);
+        g.appendChild(t1); g.appendChild(t2);
+        svg.appendChild(g);
+      });
+    });
+  }
+
+  /* Centre : total par défaut, détail de la catégorie touchée */
   const t1 = document.createElementNS(NS, 'text');
-  t1.setAttribute('x', c); t1.setAttribute('y', c - 1);
+  t1.setAttribute('x', cx); t1.setAttribute('y', cy - 1);
   t1.setAttribute('text-anchor', 'middle');
-  t1.setAttribute('class', 'donut-amount');
-  t1.setAttribute('font-size', txt.length > 10 ? 11 : (txt.length > 7 ? 13 : 15));
-  t1.textContent = txt;
+  t1.setAttribute('class', 'donut-amount donut-center-amount');
+  t1.setAttribute('font-size', '14');
+  t1.textContent = compact(total);
   svg.appendChild(t1);
   const t2 = document.createElementNS(NS, 'text');
-  t2.setAttribute('x', c); t2.setAttribute('y', c + 16);
+  t2.setAttribute('x', cx); t2.setAttribute('y', cy + 16);
   t2.setAttribute('text-anchor', 'middle');
-  t2.setAttribute('class', 'donut-sub');
+  t2.setAttribute('class', 'donut-sub donut-center-sub');
+  t2.setAttribute('font-size', '9.5');
   t2.textContent = 'dépensé';
   svg.appendChild(t2);
+
+  /* Toucher une catégorie : isolation + détail au centre */
+  svg.querySelectorAll('.donut-seg, .donut-label').forEach(function (el) {
+    el.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      const idx = Number(el.getAttribute('data-idx'));
+      donutSel = (donutSel === idx) ? null : idx;
+      updateDonutSelection();
+    });
+  });
+  svg.addEventListener('click', function () {
+    if (donutSel !== null) { donutSel = null; updateDonutSelection(); }
+  });
 }
 
-/* Légende du camembert */
-function renderLegend(byCat, total) {
-  const box = $('legendBox');
-  if (byCat.length === 0) {
-    box.innerHTML = '<p class="muted" style="text-align:center;padding:8px 0">Aucune dépense ce mois-ci.</p>';
+function updateDonutSelection() {
+  const svg = $('donutSvg');
+  if (!svg) return;
+  svg.querySelectorAll('.donut-seg').forEach(function (c) {
+    const ci = Number(c.getAttribute('data-idx'));
+    c.classList.toggle('dim', donutSel !== null && ci !== donutSel);
+    c.classList.toggle('active', donutSel !== null && ci === donutSel);
+  });
+  svg.querySelectorAll('.donut-label').forEach(function (g) {
+    const gi = Number(g.getAttribute('data-idx'));
+    g.style.opacity = (donutSel === null || gi === donutSel) ? '1' : '0.35';
+  });
+  const data = donutData;
+  if (donutSel === null || !data.byCat[donutSel]) {
+    donutSel = null;
+    donutSetCenter(compact(data.total), 'dépensé');
     return;
   }
-  box.innerHTML = byCat.map(item => {
-    const pct = total > 0 ? Math.round((item.val / total) * 100) : 0;
-    return '<div class="legend-row">' +
-      '<span class="legend-dot" style="background:' + item.cat.color + '"></span>' +
-      '<span class="legend-name">' + item.cat.emoji + ' ' + escapeHtml(item.cat.label) + '</span>' +
-      '<span class="legend-val">' + pct + '%</span>' +
-      '<span class="legend-amount">' + compact(item.val) + '</span>' +
-    '</div>';
-  }).join('');
-}
-
-/* Barres par catégorie */
-function renderCatBars(byCat, total) {
-  const box = $('catBarsBox');
-  if (byCat.length === 0) {
-    box.innerHTML = '<p class="muted" style="text-align:center;padding:8px 0">Ajoute ta première dépense 👇</p>';
-    return;
-  }
-  box.innerHTML = byCat.map(item => {
-    const pct = total > 0 ? (item.val / total) * 100 : 0;
-    return '<div class="bar-row">' +
-      '<div class="bar-top"><span>' + item.cat.emoji + ' ' + escapeHtml(item.cat.label) + '</span><span class="bar-amount">' + fmt(item.val) + '</span></div>' +
-      '<div class="bar-track"><div class="bar-fill" style="width:' + pct.toFixed(1) + '%;background:' + item.cat.color + '"></div></div>' +
-    '</div>';
-  }).join('');
+  const it = data.byCat[donutSel];
+  const pct = data.total > 0 ? Math.round(it.val / data.total * 100) : 0;
+  const nm = it.cat.label.length > 13 ? it.cat.label.slice(0, 12) + '…' : it.cat.label;
+  donutSetCenter(compact(it.val), pct + ' % · ' + nm);
 }
 
 /* Aperçu des 12 derniers mois */
