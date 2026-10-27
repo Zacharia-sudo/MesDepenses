@@ -3,8 +3,8 @@
    Une fois l'appli ouverte une première fois, elle fonctionne
    même sans Wi-Fi et même Mac éteint.
    ============================================================ */
-const CACHE = 'mesdepenses-v3';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'mesdepenses-v4';
+const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
