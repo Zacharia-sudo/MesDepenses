@@ -794,58 +794,7 @@ function renderDonut(byCat, total) {
     });
   }
 
-  /* Étiquettes : % + somme, reliées au cercle */
-  if (byCat.length > 0 && total > 0) {
-    const labels = [];
-    let acc = 0;
-    byCat.forEach((item, i) => {
-      const frac = item.val / total;
-      const mid = (acc + frac / 2) * 2 * Math.PI - Math.PI / 2;
-      acc += frac;
-      labels.push({
-        i: i, item: item, pct: Math.round(frac * 100), side: Math.cos(mid) >= 0 ? 1 : -1,
-        x1: cx + Math.cos(mid) * (r + sw / 2 + 1),
-        y1: cy + Math.sin(mid) * (r + sw / 2 + 1),
-        y: cy + Math.sin(mid) * (r + sw / 2 + 18)
-      });
-    });
-    [1, -1].forEach(function (side) {
-      const ls = labels.filter(function (l) { return l.side === side; }).sort(function (a, b) { return a.y - b.y; });
-      for (let k = 1; k < ls.length; k++) {
-        if (ls[k].y - ls[k - 1].y < 24) ls[k].y = ls[k - 1].y + 24;
-      }
-      if (ls.length) {
-        const over = ls[ls.length - 1].y - (H - 14);
-        if (over > 0) ls.forEach(function (l) { l.y -= over; });
-      }
-      ls.forEach(function (l) {
-        const xEnd = cx + side * (r + sw / 2 + 14);
-        const xText = xEnd + side * 4;
-        const line = document.createElementNS(NS, 'polyline');
-        line.setAttribute('points', l.x1 + ',' + l.y1 + ' ' + xEnd + ',' + l.y + ' ' + xText + ',' + l.y);
-        line.setAttribute('fill', 'none');
-        line.setAttribute('class', 'donut-leader');
-        svg.appendChild(line);
-        const g = document.createElementNS(NS, 'g');
-        g.setAttribute('class', 'donut-label');
-        g.setAttribute('data-idx', String(l.i));
-        const t1 = document.createElementNS(NS, 'text');
-        t1.setAttribute('x', xText + side * 2);
-        t1.setAttribute('y', l.y - 3);
-        t1.setAttribute('text-anchor', side > 0 ? 'start' : 'end');
-        t1.setAttribute('class', 'donut-lab-text');
-        t1.textContent = l.item.cat.emoji + ' ' + l.pct + ' %';
-        const t2 = document.createElementNS(NS, 'text');
-        t2.setAttribute('x', xText + side * 2);
-        t2.setAttribute('y', l.y + 9);
-        t2.setAttribute('text-anchor', side > 0 ? 'start' : 'end');
-        t2.setAttribute('class', 'donut-lab-amt');
-        t2.textContent = compact(l.item.val);
-        g.appendChild(t1); g.appendChild(t2);
-        svg.appendChild(g);
-      });
-    });
-  }
+  /* (étiquettes supprimées : le détail s'affiche au clic, au centre) */
 
   /* Centre : total par défaut, détail de la catégorie touchée */
   const t1 = document.createElementNS(NS, 'text');
