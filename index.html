@@ -182,6 +182,7 @@ main{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:14px 14px
 .field{font-size:16px}
 .bar-max .bar-top span{color:var(--accent);font-weight:700}
 .bar-max .bar-track{outline:1px solid rgba(0,255,157,.35);outline-offset:1px}
+
 </style>
 <style>
 /* ===== Thème Aurora : violet indigo, sombre premium ===== */
@@ -231,6 +232,7 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
 .dot.dep{background:#fb7185}.dot.rev{background:#34d399}
 .big-value,.mini-val,.amt,.bar-amount,.legend-amount,.amount-input,.detail-amount{font-family:ui-monospace,'SF Mono',Menlo,monospace}
 
+
 </style>
 <style>
 /* Camembert interactif */
@@ -241,6 +243,13 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
 .donut-leader{stroke:rgba(130,140,170,.45);stroke-width:1}
 .donut-lab-text{fill:var(--muted);font-size:10px;font-weight:600}
 .donut-lab-amt{fill:var(--text);font-size:10.5px;font-weight:700}
+
+.cat-list{margin-top:4px}
+.cat-list-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(38,40,70,.45);font-size:13.5px}
+.cat-list-row:last-child{border-bottom:none}
+.cat-list-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cat-list-pct{color:var(--muted);font-size:12px;min-width:40px;text-align:right}
+.cat-list-amt{font-weight:700;font-family:ui-monospace,'SF Mono',Menlo,monospace;min-width:92px;text-align:right}
 </style>
 </head>
 <body>
@@ -278,6 +287,7 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
     <div class="card">
       <div class="card-title">Où part mon barème</div>
       <div class="donut-wrap"><svg id="donutSvg" viewBox="0 0 360 300"></svg></div>
+      <div id="catTotalList" class="cat-list"></div>
     </div>
     <div class="card">
       <div class="card-title">12 derniers mois</div>
@@ -603,7 +613,7 @@ function parseAmount(s) {
 }
 function fmt(n) {
   const cur = state.settings.currency || '€';
-  return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ' + cur;
+  return Math.round(n).toLocaleString('fr-FR') + ' ' + cur;
 }
 function compact(n) {
   const cur = state.settings.currency || '€';
@@ -611,7 +621,7 @@ function compact(n) {
   if (n >= 1e9) return f(n / 1e9, 1) + ' Md ' + cur;
   if (n >= 1e6) return f(n / 1e6, 1) + ' M ' + cur;
   if (n >= 1e4) return f(n / 1e3, 0) + ' k ' + cur;
-  return f(Math.round(n * 100) / 100, 2) + ' ' + cur;
+  return f(Math.round(n), 0) + ' ' + cur;
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 function sum(list) { return list.reduce((s, e) => s + e.montant, 0); }
@@ -726,6 +736,7 @@ function renderBilan() {
     .sort((a, b) => b.val - a.val);
 
   renderDonut(byCat, totalDep);
+  renderCatList(byCat, totalDep);
   renderYearBars();
 }
 
@@ -888,6 +899,23 @@ function updateDonutSelection() {
   const pct = data.total > 0 ? Math.round(it.val / data.total * 100) : 0;
   const nm = it.cat.label.length > 13 ? it.cat.label.slice(0, 12) + '…' : it.cat.label;
   donutSetCenter(compact(it.val), pct + ' % · ' + nm);
+}
+
+/* Liste des totaux par catégorie (montant + pourcentage) */
+function renderCatList(byCat, total) {
+  const box = $('catTotalList');
+  if (!box) return;
+  if (!byCat.length) {
+    box.innerHTML = '<p class="muted" style="text-align:center;padding:8px 0">Aucune dépense ce mois-ci.</p>';
+    return;
+  }
+  box.innerHTML = byCat.map(item => {
+    const pct = total > 0 ? Math.round(item.val / total * 100) : 0;
+    return '<div class="cat-list-row">' +
+      '<span class="cat-list-name">' + item.cat.emoji + ' ' + escapeHtml(item.cat.label) + '</span>' +
+      '<span class="cat-list-pct">' + pct + ' %</span>' +
+      '<span class="cat-list-amt">' + fmt(item.val) + '</span></div>';
+  }).join('');
 }
 
 /* Aperçu des 12 derniers mois */
