@@ -244,6 +244,9 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
 .donut-lab-text{fill:var(--muted);font-size:10px;font-weight:600}
 .donut-lab-amt{fill:var(--text);font-size:10.5px;font-weight:700}
 
+.donut-info{text-align:center;font-size:12.5px;color:var(--muted);padding:2px 0 8px;min-height:18px}
+.donut-info b{color:var(--text)}
+.donut-info .pct{color:var(--accent);font-weight:700}
 .cat-list{margin-top:4px}
 .cat-list-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(38,40,70,.45);font-size:13.5px}
 .cat-list-row:last-child{border-bottom:none}
@@ -287,6 +290,7 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
     <div class="card">
       <div class="card-title">Où part mon barème</div>
       <div class="donut-wrap"><svg id="donutSvg" viewBox="0 0 360 300"></svg></div>
+      <div id="donutInfo" class="donut-info">Touche une part du camembert pour voir le détail</div>
       <div id="catTotalList" class="cat-list"></div>
     </div>
     <div class="card">
@@ -766,6 +770,8 @@ function renderDonut(byCat, total) {
   svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
   donutData = { byCat: byCat, total: total };
   donutSel = null;
+  const infoReset = $('donutInfo');
+  if (infoReset) infoReset.innerHTML = 'Touche une part du camembert pour voir le détail';
 
   if (total <= 0 || byCat.length === 0) {
     const circle = document.createElementNS(NS, 'circle');
@@ -790,6 +796,13 @@ function renderDonut(byCat, total) {
       circle.setAttribute('class', 'donut-seg');
       circle.setAttribute('data-idx', String(i));
       svg.appendChild(circle);
+      /* zone de toucher plus large (invisible) */
+      const hit = circle.cloneNode(true);
+      hit.setAttribute('class', 'donut-hit');
+      hit.setAttribute('stroke', 'transparent');
+      hit.setAttribute('stroke-width', String(sw + 22));
+      hit.setAttribute('pointer-events', 'stroke');
+      svg.appendChild(hit);
       offset += frac * C;
     });
   }
@@ -813,7 +826,7 @@ function renderDonut(byCat, total) {
   svg.appendChild(t2);
 
   /* Toucher une catégorie : isolation + détail au centre */
-  svg.querySelectorAll('.donut-seg, .donut-label').forEach(function (el) {
+  svg.querySelectorAll('.donut-seg, .donut-hit, .donut-label').forEach(function (el) {
     el.addEventListener('click', function (ev) {
       ev.stopPropagation();
       const idx = Number(el.getAttribute('data-idx'));
@@ -839,15 +852,18 @@ function updateDonutSelection() {
     g.style.opacity = (donutSel === null || gi === donutSel) ? '1' : '0.35';
   });
   const data = donutData;
+  const info = $('donutInfo');
   if (donutSel === null || !data.byCat[donutSel]) {
     donutSel = null;
     donutSetCenter(compact(data.total), 'dépensé');
+    if (info) info.innerHTML = 'Touche une part du camembert pour voir le détail';
     return;
   }
   const it = data.byCat[donutSel];
   const pct = data.total > 0 ? Math.round(it.val / data.total * 100) : 0;
   const nm = it.cat.label.length > 13 ? it.cat.label.slice(0, 12) + '…' : it.cat.label;
   donutSetCenter(compact(it.val), pct + ' % · ' + nm);
+  if (info) info.innerHTML = '<b>' + it.cat.emoji + ' ' + escapeHtml(it.cat.label) + '</b> — <span class="pct">' + pct + ' %</span> — ' + fmt(it.val);
 }
 
 /* Liste des totaux par catégorie (montant + pourcentage) */
@@ -858,13 +874,20 @@ function renderCatList(byCat, total) {
     box.innerHTML = '<p class="muted" style="text-align:center;padding:8px 0">Aucune dépense ce mois-ci.</p>';
     return;
   }
-  box.innerHTML = byCat.map(item => {
+  box.innerHTML = byCat.map((item, i) => {
     const pct = total > 0 ? Math.round(item.val / total * 100) : 0;
-    return '<div class="cat-list-row">' +
+    return '<div class="cat-list-row" data-idx="' + i + '" style="cursor:pointer">' +
       '<span class="cat-list-name">' + item.cat.emoji + ' ' + escapeHtml(item.cat.label) + '</span>' +
       '<span class="cat-list-pct">' + pct + ' %</span>' +
       '<span class="cat-list-amt">' + fmt(item.val) + '</span></div>';
   }).join('');
+  box.querySelectorAll('.cat-list-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = Number(row.dataset.idx);
+      donutSel = (donutSel === idx) ? null : idx;
+      updateDonutSelection();
+    });
+  });
 }
 
 /* Aperçu des 12 derniers mois */
