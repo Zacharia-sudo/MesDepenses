@@ -273,8 +273,9 @@ header.app-header{background:rgba(10,10,20,.85);border-bottom-color:#24264a}
   <!-- ============ VUE BILAN ============ -->
   <section id="view-bilan" class="view">
     <div class="card solde-card">
-      <div class="muted small" id="soldeLabel">Solde du mois</div>
+      <div class="muted small" id="soldeLabel">Solde cumulé</div>
       <div id="soldeVal" class="big-value">0,00 FCFA</div>
+      <div class="muted small" id="monthDetail"></div>
       <div class="muted small" id="avgVal">—</div>
     </div>
     <div class="mini-grid">
@@ -724,15 +725,20 @@ function renderBilan() {
   const rev = entries.filter(e => e.type === 'revenu');
   const totalDep = sum(dep), totalRev = sum(rev), solde = totalRev - totalDep;
 
+  /* Solde cumulé : toutes les entrées − toutes les dépenses, jusqu'à la fin du mois affiché */
+  const cumul = state.entries.filter(e => spaceOf(e) === currentSpace && monthOf(e.date) <= viewMonth);
+  const cumRev = sum(cumul.filter(e => e.type === 'revenu'));
+  const cumDep = sum(cumul.filter(e => e.type === 'depense'));
+  const soldeCum = cumRev - cumDep;
+
   const sv = $('soldeVal');
-  sv.textContent = fmt(Math.abs(solde));
-  sv.className = 'big-value ' + (solde < 0 ? 'neg' : (solde > 0 ? 'pos' : 'zero'));
-  $('soldeLabel').textContent =
-    solde < 0 ? 'Plus de dépenses que d\'entrées' :
-    solde > 0 ? 'Plus d\'entrées que de dépenses' : 'Dépenses et entrées à l\'équilibre';
+  sv.textContent = fmt(Math.abs(soldeCum));
+  sv.className = 'big-value ' + (soldeCum < 0 ? 'neg' : (soldeCum > 0 ? 'pos' : 'zero'));
+  $('soldeLabel').textContent = 'Solde cumulé';
+  $('monthDetail').textContent = 'Ce mois-ci : +' + fmt(totalRev) + ' entrées · −' + fmt(totalDep) + ' dépenses · net ' + fmt(solde);
   $('entreesVal').textContent = fmt(totalRev);
   $('depensesVal').textContent = fmt(totalDep);
-  $('avgVal').textContent = totalDep > 0 ? '≈ ' + fmt(totalDep / elapsedDays(viewMonth)) + ' / jour' : 'Aucune dépense ce mois-ci';
+  $('avgVal').textContent = totalDep > 0 ? '≈ ' + fmt(totalDep / elapsedDays(viewMonth)) + ' / jour' : '';
 
   const byCat = state.categories
     .map(c => ({ cat: c, val: sum(dep.filter(e => e.cat === c.id)) }))
